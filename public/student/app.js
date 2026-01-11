@@ -46,6 +46,16 @@ class StudentApp {
       }
     });
 
+    this.socket.on('class:started', async (data) => {
+      this.sessionId = data.sessionId;
+      this.currentLessonId = data.lessonId;
+      this.currentPage = data.currentPage;
+      await this.loadSlides(data.lessonId);
+      this.showClassroom(data.lessonTitle);
+      this.showSlide(this.currentPage);
+      this.showNotification('上课开始');
+    });
+
     this.socket.on('class:active', async (data) => {
       this.sessionId = data.sessionId;
       this.currentLessonId = data.lessonId;
@@ -110,7 +120,13 @@ class StudentApp {
   async loadSlides(lessonId) {
     try {
       const response = await fetch(`/api/student/lesson/${lessonId}/slides`);
-      this.slides = await response.json();
+      const slides = await response.json();
+      this.slides = slides.map(s => ({
+        page_number: s.page_number - 1,
+        image_path: s.image_path,
+        lesson_id: s.lesson_id
+      }));
+      console.log(`Loaded ${this.slides.length} slides`);
     } catch (error) {
       console.error('Load slides error:', error);
     }
@@ -128,9 +144,12 @@ class StudentApp {
   }
 
   showSlide(pageNumber) {
-    if (!this.slides[pageNumber]) return;
-    
     const slide = this.slides[pageNumber];
+    if (!slide) {
+      console.warn(`Slide ${pageNumber} not found, total: ${this.slides.length}`);
+      return;
+    }
+    
     document.getElementById('studentSlide').src = slide.image_path;
   }
 

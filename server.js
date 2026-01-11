@@ -29,6 +29,8 @@ app.use('/api/teacher', require('./routes/teacher'));
 app.use('/api/student', require('./routes/student'));
 app.use('/api/config', require('./routes/api'));
 
+app.get('/favicon.ico', (req, res) => res.status(204).end());
+
 io.on('connection', (socket) => {
   console.log(`Client connected: ${socket.id}`);
 
