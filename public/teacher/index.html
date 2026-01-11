@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>教师端 - 英语教学互动系统</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>英语教学互动系统 - 教师端</h1>
+            <div class="connection-status">
+                <span id="connectionStatus" class="status disconnected">未连接</span>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <aside class="sidebar">
+                <nav class="nav-menu">
+                    <button class="nav-item active" data-section="lessons">课件管理</button>
+                    <button class="nav-item" data-section="classroom">上课模式</button>
+                    <button class="nav-item" data-section="tasks">任务管理</button>
+                    <button class="nav-item" data-section="submissions">提交管理</button>
+                    <button class="nav-item" data-section="students">学生管理</button>
+                    <button class="nav-item" data-section="stats">数据统计</button>
+                </nav>
+            </aside>
+
+            <main class="content">
+                <section id="lessons" class="section active">
+                    <h2>课件管理</h2>
+                    <div class="upload-area">
+                        <input type="file" id="lessonFile" accept=".pptx,.pdf" style="display: none;">
+                        <button class="btn btn-primary" onclick="document.getElementById('lessonFile').click()">
+                            上传课件
+                        </button>
+                        <input type="text" id="lessonTitle" placeholder="课件标题" class="input">
+                    </div>
+                    <div id="lessonsList" class="list"></div>
+                </section>
+
+                <section id="classroom" class="section">
+                    <h2>上课模式</h2>
+                    <div id="classroomControls">
+                        <div class="form-group">
+                            <label>选择课件</label>
+                            <select id="classLessonSelect" class="input">
+                                <option value="">选择课件</option>
+                            </select>
+                        </div>
+                        <div class="class-buttons">
+                            <button id="startClassBtn" class="btn btn-primary">开始上课</button>
+                            <button id="endClassBtn" class="btn btn-danger" style="display:none;">结束上课</button>
+                        </div>
+                    </div>
+                    <div id="classroomStatus" style="display:none;">
+                        <div class="class-info">
+                            <h3>当前课件</h3>
+                            <p id="currentLessonTitle"></p>
+                            <p id="classSessionInfo"></p>
+                        </div>
+                    </div>
+                    <div id="slideViewer" style="display:none;">
+                        <div class="slide-container">
+                            <img id="currentSlide" src="" alt="当前幻灯片">
+                        </div>
+                        <div class="slide-controls">
+                            <button id="prevSlideBtn" class="btn">上一页</button>
+                            <span id="pageIndicator">0 / 0</span>
+                            <button id="nextSlideBtn" class="btn">下一页</button>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="tasks" class="section">
+                    <h2>任务管理</h2>
+                    <div class="task-form">
+                        <select id="taskLessonId" class="input">
+                            <option value="">选择课件</option>
+                        </select>
+                        <input type="text" id="taskTitle" placeholder="任务标题" class="input">
+                        <select id="taskType" class="input">
+                            <option value="choice">选择题</option>
+                            <option value="fillblank">填空题</option>
+                            <option value="essay">简答题</option>
+                            <option value="audio">录音题</option>
+                            <option value="photo">拍照题</option>
+                        </select>
+                        <textarea id="taskContent" placeholder="题目内容" class="textarea"></textarea>
+                        <textarea id="taskCorrectAnswer" placeholder="参考答案" class="textarea"></textarea>
+                        <input type="number" id="taskPoints" placeholder="分值" value="100" class="input">
+                        <button class="btn btn-primary" onclick="createTask()">创建任务</button>
+                    </div>
+                    <div id="tasksList" class="list"></div>
+                </section>
+
+                <section id="submissions" class="section">
+                    <h2>提交管理</h2>
+                    <div class="submissions-toolbar">
+                        <button class="btn" onclick="loadSubmissions()">刷新</button>
+                        <button class="btn btn-primary" onclick="gradeAll()">批量批改</button>
+                    </div>
+                    <div id="submissionsList" class="list"></div>
+                </section>
+
+                <section id="students" class="section">
+                    <h2>学生管理</h2>
+                    <div id="studentsList" class="list"></div>
+                </section>
+
+                <section id="stats" class="section">
+                    <h2>数据统计</h2>
+                    <div id="statsContent" class="stats"></div>
+                </section>
+            </main>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

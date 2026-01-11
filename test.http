@@ -1,0 +1,81 @@
+### 获取所有课件
+GET http://localhost:3000/api/teacher/lessons
+
+### 获取单个课件
+GET http://localhost:3000/api/teacher/lessons/1
+
+### 获取所有任务
+GET http://localhost:3000/api/teacher/tasks
+
+### 获取课件的任务
+GET http://localhost:3000/api/teacher/tasks/lesson/1
+
+### 获取所有提交
+GET http://localhost:3000/api/teacher/submissions
+
+### 获取未批改的提交
+GET http://localhost:3000/api/teacher/submissions/ungraded
+
+### 获取统计信息
+GET http://localhost:3000/api/teacher/stats
+
+### 获取所有学生
+GET http://localhost:3000/api/teacher/students
+
+### 学生加入课堂
+POST http://localhost:3000/api/student/join
+Content-Type: application/json
+
+{
+  "name": "测试学生",
+  "studentNumber": "STU001",
+  "deviceId": "device_123",
+  "socketId": "socket_456"
+}
+
+### 学生获取当前课件
+GET http://localhost:3000/api/student/lesson/current
+
+### 学生获取任务
+GET http://localhost:3000/api/student/tasks
+
+### 学生提交作业
+POST http://localhost:3000/api/student/submit
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundary
+
+------WebKitFormBoundary
+Content-Disposition: form-data; name="taskId"
+
+1
+------WebKitFormBoundary
+Content-Disposition: form-data; name="studentId"
+
+1
+------WebKitFormBoundary
+Content-Disposition: form-data; name="answer"
+
+这是学生的答案
+------WebKitFormBoundary--
+
+### 获取学生提交记录
+GET http://localhost:3000/api/student/my-submissions/1
+
+### 获取学生统计
+GET http://localhost:3000/api/student/my-stats/1
+
+### 批改作业
+POST http://localhost:3000/api/teacher/grade/1
+Content-Type: application/json
+
+{
+  "teacherFeedback": "批改评语"
+}
+
+### 获取阿里云配置状态
+GET http://localhost:3000/api/config/alicloud/status
+
+### 获取Qwen配置状态
+GET http://localhost:3000/api/config/qwen/status
+
+### 获取备份配置状态
+GET http://localhost:3000/api/config/backup/status
