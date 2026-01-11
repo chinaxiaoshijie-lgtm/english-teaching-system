@@ -9,6 +9,9 @@ const Submission = require('../models/submission');
 const QwenService = require('../services/qwen-service');
 const SlideService = require('../services/slide-service');
 const ClassroomSession = require('../models/classroom-session');
+const ExerciseParserService = require('../services/exercise-parser-service');
+const Question = require('../models/question');
+const ExerciseBook = require('../models/exercise-book');
 
 const router = express.Router();
 const qwenService = new QwenService();
@@ -32,7 +35,7 @@ const upload = multer({
 
 router.post('/upload-lesson', upload.single('file'), async (req, res) => {
   try {
-    const { title } = req.body;
+    const { title, lessonType } = req.body;
     const file = req.file;
 
     if (!file) {
@@ -45,12 +48,13 @@ router.post('/upload-lesson', upload.single('file'), async (req, res) => {
     const lessonId = await lessonModel.create({
       title: title || path.basename(file.originalname, path.extname(file.originalname)),
       filePath: `/uploads/lessons/${file.filename}`,
-      fileType: path.extname(file.originalname)
+      fileType: path.extname(file.originalname),
+      lessonType: lessonType || 'class_pdf'
     });
 
     const filePath = `/uploads/lessons/${file.filename}`;
 
-    if (path.extname(file.originalname).toLowerCase() === '.pdf') {
+    if (path.extname(file.originalname).toLowerCase() === '.pdf' && lessonType === 'class_pdf') {
       try {
         const slideService = new SlideService(db);
         const result = await slideService.processLesson(lessonId, filePath);
@@ -436,6 +440,179 @@ router.get('/lesson/:id/slides', async (req, res) => {
   } catch (error) {
     console.error('Get slides error:', error);
     res.status(500).json({ error: '获取幻灯片失败' });
+  }
+});
+
+router.delete('/lessons/:id', async (req, res) => {
+  try {
+    const db = req.app.get('db');
+    const lessonModel = new Lesson(db);
+    
+    await lessonModel.setDisabled(parseInt(req.params.id), true);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete lesson error:', error);
+    res.status(500).json({ error: '删除课件失败' });
+  }
+});
+
+router.post('/parse-exercise/:lessonId', async (req, res) => {
+  try {
+    const db = req.app.get('db');
+    const lessonModel = new Lesson(db);
+
+    const lesson = await lessonModel.getById(parseInt(req.params.lessonId));
+    if (!lesson) {
+      return res.status(404).json({ error: '课件不存在' });
+    }
+
+    console.log('Starting exercise parsing for lesson:', lesson.id, 'type:', lesson.lesson_type);
+
+    if (lesson.lesson_type !== 'exercise_pdf' && lesson.lesson_type !== 'exercise_word') {
+      return res.status(400).json({ error: '该课件不是练习题文件，无法解析' });
+    }
+
+    const exerciseParserService = new ExerciseParserService(db);
+    const parsedResult = await exerciseParserService.parseFile(lesson.id, lesson.file_path, lesson.file_type);
+
+    const exerciseBookModel = new ExerciseBook(db);
+    const exerciseBookId = await exerciseBookModel.create({
+      lessonId: lesson.id,
+      title: `${lesson.title} - 习题本`
+    });
+
+    const questionIds = await exerciseParserService.createQuestionsFromParsed(lesson.id, parsedResult, exerciseBookId);
+
+    res.json({ success: true, exerciseBookId, questionCount: questionIds.length, questions: parsedResult.questions });
+  } catch (error) {
+    console.error('Parse exercise error:', error);
+    res.status(500).json({ error: `解析练习题失败: ${error.message}` });
+  }
+});
+
+router.get('/exercise-books', async (req, res) => {
+  try {
+    const db = req.app.get('db');
+    const exerciseBookModel = new ExerciseBook(db);
+    const exerciseBooks = await exerciseBookModel.getAll();
+    res.json(exerciseBooks);
+  } catch (error) {
+    console.error('Get exercise books error:', error);
+    res.status(500).json({ error: '获取习题本失败' });
+  }
+});
+
+router.get('/exercise-books/:id', async (req, res) => {
+  try {
+    const db = req.app.get('db');
+    const exerciseBookModel = new ExerciseBook(db);
+    const exerciseBook = await exerciseBookModel.getWithQuestions(parseInt(req.params.id));
+    
+    if (!exerciseBook) {
+      return res.status(404).json({ error: '习题本不存在' });
+    }
+    
+    res.json(exerciseBook);
+  } catch (error) {
+    console.error('Get exercise book error:', error);
+    res.status(500).json({ error: '获取习题本失败' });
+  }
+});
+
+router.get('/exercise-books/lesson/:lessonId', async (req, res) => {
+  try {
+    const db = req.app.get('db');
+    const exerciseBookModel = new ExerciseBook(db);
+    const exerciseBooks = await exerciseBookModel.getByLessonId(parseInt(req.params.lessonId));
+    res.json(exerciseBooks);
+  } catch (error) {
+    console.error('Get exercise books by lesson error:', error);
+    res.status(500).json({ error: '获取习题本失败' });
+  }
+});
+
+router.put('/exercise-books/:id', async (req, res) => {
+  try {
+    const db = req.app.get('db');
+    const exerciseBookModel = new ExerciseBook(db);
+    
+    await exerciseBookModel.update(parseInt(req.params.id), req.body);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Update exercise book error:', error);
+    res.status(500).json({ error: '更新习题本失败' });
+  }
+});
+
+router.delete('/exercise-books/:id', async (req, res) => {
+  try {
+    const db = req.app.get('db');
+    const exerciseBookModel = new ExerciseBook(db);
+    const questionModel = new Question(db);
+    
+    await questionModel.deleteByExerciseBookId(parseInt(req.params.id));
+    await exerciseBookModel.delete(parseInt(req.params.id));
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete exercise book error:', error);
+    res.status(500).json({ error: '删除习题本失败' });
+  }
+});
+
+router.get('/questions', async (req, res) => {
+  try {
+    const db = req.app.get('db');
+    const questionModel = new Question(db);
+    const questions = await questionModel.getAll();
+    res.json(questions);
+  } catch (error) {
+    console.error('Get questions error:', error);
+    res.status(500).json({ error: '获取题目失败' });
+  }
+});
+
+router.get('/questions/:id', async (req, res) => {
+  try {
+    const db = req.app.get('db');
+    const questionModel = new Question(db);
+    const question = await questionModel.getById(parseInt(req.params.id));
+    
+    if (!question) {
+      return res.status(404).json({ error: '题目不存在' });
+    }
+    
+    res.json(question);
+  } catch (error) {
+    console.error('Get question error:', error);
+    res.status(500).json({ error: '获取题目失败' });
+  }
+});
+
+router.put('/questions/:id', async (req, res) => {
+  try {
+    const db = req.app.get('db');
+    const questionModel = new Question(db);
+    
+    await questionModel.update(parseInt(req.params.id), req.body);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Update question error:', error);
+    res.status(500).json({ error: '更新题目失败' });
+  }
+});
+
+router.delete('/questions/:id', async (req, res) => {
+  try {
+    const db = req.app.get('db');
+    const questionModel = new Question(db);
+    
+    await questionModel.delete(parseInt(req.params.id));
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete question error:', error);
+    res.status(500).json({ error: '删除题目失败' });
   }
 });
 

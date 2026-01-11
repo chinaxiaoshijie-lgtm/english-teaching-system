@@ -76,6 +76,9 @@ class TeacherApp {
       case 'lessons':
         this.loadLessons();
         break;
+      case 'exercise-books':
+        this.loadExerciseBooks();
+        break;
       case 'classroom':
         this.loadClassroomData();
         break;
@@ -144,7 +147,12 @@ class TeacherApp {
   async loadSlides(lessonId) {
     try {
       const response = await fetch(`/api/teacher/lesson/${lessonId}/slides`);
-      return await response.json();
+      const slides = await response.json();
+      return slides.map(s => ({
+        page_number: s.page_number - 1,
+        image_path: s.image_path,
+        lesson_id: s.lesson_id
+      }));
     } catch (error) {
       console.error('Load slides error:', error);
       return [];
@@ -243,9 +251,12 @@ class TeacherApp {
   }
 
   showSlide(pageNumber) {
-    if (!this.slides[pageNumber]) return;
-    
     const slide = this.slides[pageNumber];
+    if (!slide) {
+      console.warn(`Slide ${pageNumber} not found, total: ${this.slides.length}`);
+      return;
+    }
+    
     document.getElementById('currentSlide').src = slide.image_path;
     document.getElementById('pageIndicator').textContent = `${pageNumber + 1} / ${this.slides.length}`;
   }
@@ -270,9 +281,11 @@ class TeacherApp {
     if (!file) return;
 
     const title = document.getElementById('lessonTitle').value || file.name;
+    const lessonType = document.getElementById('lessonType').value || 'class_pdf';
     const formData = new FormData();
     formData.append('file', file);
     formData.append('title', title);
+    formData.append('lessonType', lessonType);
 
     try {
       const response = await fetch('/api/teacher/upload-lesson', {
@@ -281,12 +294,13 @@ class TeacherApp {
       });
 
       const result = await response.json();
-      
+
       if (result.success) {
         this.showNotification('课件上传成功');
         this.loadLessons();
         document.getElementById('lessonFile').value = '';
         document.getElementById('lessonTitle').value = '';
+        document.getElementById('lessonType').value = 'class_pdf';
       } else {
         throw new Error(result.error);
       }
@@ -299,16 +313,18 @@ class TeacherApp {
     try {
       const response = await fetch('/api/teacher/lessons');
       const lessons = await response.json();
-      
+
       const list = document.getElementById('lessonsList');
       list.innerHTML = lessons.map(lesson => `
         <div class="list-item">
           <div>
+            <span class="lesson-type-icon ${lesson.lesson_type}">${this.getLessonTypeIcon(lesson.lesson_type)}</span>
             <h3>${lesson.title}</h3>
-            <p>${lesson.file_type} - ${new Date(lesson.uploaded_at).toLocaleString()}</p>
+            <p>${this.getLessonTypeText(lesson.lesson_type)} | ${lesson.file_type} | ${new Date(lesson.uploaded_at).toLocaleString()}</p>
           </div>
           <div class="actions">
             ${!lesson.published ? `<button class="btn btn-success" onclick="publishLesson(${lesson.id})">发布</button>` : '<span class="status connected">已发布</span>'}
+            <button class="btn btn-danger" onclick="deleteLesson(${lesson.id})">删除</button>
           </div>
         </div>
       `).join('');
@@ -322,9 +338,9 @@ class TeacherApp {
       const response = await fetch(`/api/teacher/publish-lesson/${lessonId}`, {
         method: 'POST'
       });
-      
+
       const result = await response.json();
-      
+
       if (result.success) {
         this.showNotification('课件已发布到学生端');
         this.loadLessons();
@@ -332,6 +348,45 @@ class TeacherApp {
     } catch (error) {
       this.showNotification('发布失败', 'error');
     }
+  }
+
+  async deleteLesson(lessonId) {
+    if (!confirm('确定要删除这个课件吗？删除后学生将无法看到。')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/teacher/lessons/${lessonId}`, {
+        method: 'DELETE'
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        this.showNotification('课件已删除');
+        this.loadLessons();
+      }
+    } catch (error) {
+      this.showNotification('删除失败', 'error');
+    }
+  }
+
+  getLessonTypeIcon(type) {
+    const icons = {
+      class_pdf: '📄',
+      exercise_pdf: '📝',
+      exercise_word: '📝'
+    };
+    return icons[type] || '📄';
+  }
+
+  getLessonTypeText(type) {
+    const texts = {
+      class_pdf: '上课PDF',
+      exercise_pdf: '练习题PDF',
+      exercise_word: '练习题Word'
+    };
+    return texts[type] || type;
   }
 
   async loadLessonsSelect() {
@@ -537,7 +592,7 @@ class TeacherApp {
     try {
       const response = await fetch('/api/teacher/stats');
       const stats = await response.json();
-      
+
       const content = document.getElementById('statsContent');
       content.innerHTML = `
         <div class="stat-card">
@@ -574,6 +629,298 @@ class TeacherApp {
     }
   }
 
+  async loadExerciseBooks() {
+    try {
+      const lessonsResponse = await fetch('/api/teacher/lessons');
+      const lessons = await lessonsResponse.json();
+      const exerciseLessons = lessons.filter(l => l.lesson_type === 'exercise_pdf' || l.lesson_type === 'exercise_word');
+
+      const list = document.getElementById('exerciseBooksList');
+      let html = '';
+
+      for (const lesson of exerciseLessons) {
+        const exerciseBooksResponse = await fetch(`/api/teacher/exercise-books/lesson/${lesson.id}`);
+        const exerciseBooks = await exerciseBooksResponse.json();
+
+        html += `
+          <div class="lesson-group">
+            <h3>${lesson.title}</h3>
+            <p>${lesson.file_type} | ${new Date(lesson.uploaded_at).toLocaleString()}</p>
+            <div class="exercise-books">
+              ${exerciseBooks.length === 0 ? `
+                <div class="list-item">
+                  <p>暂未解析，请点击下方按钮解析</p>
+                  <div class="actions">
+                    <button class="btn btn-primary" onclick="parseExercise(${lesson.id})">解析练习题</button>
+                  </div>
+                </div>
+              ` : exerciseBooks.map(book => `
+                <div class="list-item exercise-book-item">
+                  <div>
+                    <h4>📚 ${book.title}</h4>
+                    <p>题目数量: ${book.question_count || '?'} | 创建时间: ${new Date(book.created_at).toLocaleString()}</p>
+                  </div>
+                  <div class="actions">
+                    <button class="btn btn-primary" onclick="viewExerciseBook(${book.id})">查看题目</button>
+                    <button class="btn btn-danger" onclick="deleteExerciseBook(${book.id})">删除</button>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      }
+
+      list.innerHTML = html || '<p style="padding: 20px; text-align: center; color: #888;">暂无练习题文件，请先上传练习题PDF或Word文件</p>';
+    } catch (error) {
+      console.error('Load exercise books error:', error);
+    }
+  }
+
+  async parseExercise(lessonId) {
+    this.showNotification('正在解析练习题，请稍候...');
+
+    try {
+      const response = await fetch(`/api/teacher/parse-exercise/${lessonId}`, {
+        method: 'POST'
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        this.showNotification(`解析成功，识别到 ${result.questionCount} 道题目`);
+        this.loadExerciseBooks();
+      } else {
+        throw new Error(result.error);
+      }
+    } catch (error) {
+      this.showNotification('解析失败: ' + error.message, 'error');
+    }
+  }
+
+  async viewExerciseBook(bookId) {
+    try {
+      const response = await fetch(`/api/teacher/exercise-books/${bookId}`);
+      const book = await response.json();
+
+      let questionsHtml = book.questions ? book.questions.map((q, index) => `
+        <div class="question-item" data-question-id="${q.id}">
+          <div class="question-header">
+            <span class="question-number">第 ${index + 1} 题</span>
+            <span class="question-type">${this.getQuestionTypeText(q.type)}</span>
+            <span class="question-difficulty">${q.difficulty || 'medium'}</span>
+          </div>
+          <div class="question-content">
+            <textarea class="question-textarea" onchange="updateQuestion(${q.id}, 'content', this.value)">${q.content || ''}</textarea>
+          </div>
+          ${q.options ? `
+            <div class="question-options">
+              ${q.options.map((opt, i) => `
+                <div class="option-item">
+                  <label>选项 ${String.fromCharCode(65 + i)}:</label>
+                  <input type="text" value="${opt}" onchange="updateQuestionOption(${q.id}, ${i}, this.value)">
+                </div>
+              `).join('')}
+            </div>
+          ` : ''}
+          <div class="question-answer">
+            <label>正确答案:</label>
+            <input type="text" value="${q.correct_answer || ''}" onchange="updateQuestion(${q.id}, 'correct_answer', this.value)">
+          </div>
+          <div class="question-actions">
+            <button class="btn btn-success" onclick="saveQuestion(${q.id})">保存</button>
+            <button class="btn btn-danger" onclick="deleteQuestion(${q.id})">删除</button>
+          </div>
+        </div>
+      `).join('') : '<p>暂无题目</p>';
+
+      const modal = document.createElement('div');
+      modal.className = 'modal';
+      modal.innerHTML = `
+        <div class="modal-content exercise-book-modal">
+          <div class="modal-header">
+            <h2>${book.title}</h2>
+            <button class="modal-close" onclick="this.closest('.modal').remove()">×</button>
+          </div>
+          <div class="modal-body">
+            ${questionsHtml}
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-primary" onclick="createTaskFromExerciseBook(${book.id})">创建任务</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    } catch (error) {
+      this.showNotification('加载习题本失败', 'error');
+    }
+  }
+
+  async deleteExerciseBook(bookId) {
+    if (!confirm('确定要删除这个习题本吗？')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/teacher/exercise-books/${bookId}`, {
+        method: 'DELETE'
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        this.showNotification('习题本已删除');
+        this.loadExerciseBooks();
+      }
+    } catch (error) {
+      this.showNotification('删除失败', 'error');
+    }
+  }
+
+  getQuestionTypeText(type) {
+    const types = {
+      single_choice: '单选题',
+      multiple_choice: '多选题',
+      fillblank: '填空题',
+      cloze: '完形填空',
+      essay: '作文'
+    };
+    return types[type] || type;
+  }
+
+  async updateQuestion(questionId, field, value) {
+    try {
+      const response = await fetch(`/api/teacher/questions/${questionId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [field]: value })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        this.showNotification('已更新');
+      }
+    } catch (error) {
+      this.showNotification('更新失败', 'error');
+    }
+  }
+
+  async updateQuestionOption(questionId, index, value) {
+    try {
+      const getResponse = await fetch(`/api/teacher/questions/${questionId}`);
+      const question = await getResponse.json();
+
+      if (question.options) {
+        question.options[index] = value;
+
+        const response = await fetch(`/api/teacher/questions/${questionId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ options: question.options })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          this.showNotification('已更新');
+        }
+      }
+    } catch (error) {
+      this.showNotification('更新失败', 'error');
+    }
+  }
+
+  async saveQuestion(questionId) {
+    const questionItem = document.querySelector(`[data-question-id="${questionId}"]`);
+    const textarea = questionItem.querySelector('.question-textarea');
+    const answerInput = questionItem.querySelector('.question-answer input');
+    const optionInputs = questionItem.querySelectorAll('.option-item input');
+
+    const updateData = {
+      content: textarea.value,
+      correct_answer: answerInput.value
+    };
+
+    if (optionInputs.length > 0) {
+      const options = Array.from(optionInputs).map(input => input.value);
+      updateData.options = options;
+    }
+
+    try {
+      const response = await fetch(`/api/teacher/questions/${questionId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updateData)
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        this.showNotification('题目已保存');
+      }
+    } catch (error) {
+      this.showNotification('保存失败', 'error');
+    }
+  }
+
+  async deleteQuestion(questionId) {
+    if (!confirm('确定要删除这道题目吗？')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/teacher/questions/${questionId}`, {
+        method: 'DELETE'
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        this.showNotification('题目已删除');
+        document.querySelector(`[data-question-id="${questionId}"]`).remove();
+      }
+    } catch (error) {
+      this.showNotification('删除失败', 'error');
+    }
+  }
+
+  async createTaskFromExerciseBook(bookId) {
+    try {
+      const response = await fetch(`/api/teacher/exercise-books/${bookId}`);
+      const book = await response.json();
+
+      if (!book.questions || book.questions.length === 0) {
+        this.showNotification('习题本中没有题目', 'error');
+        return;
+      }
+
+      const taskData = {
+        lessonId: book.lesson_id,
+        title: book.title,
+        type: 'essay',
+        content: `本任务包含 ${book.questions.length} 道题目，请在学生端查看详情。`,
+        correctAnswer: '',
+        points: 100
+      };
+
+      const taskResponse = await fetch('/api/teacher/create-task', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(taskData)
+      });
+
+      const taskResult = await taskResponse.json();
+
+      if (taskResult.success) {
+        this.showNotification('任务已创建，请前往任务管理页面发布');
+        document.querySelector('.modal').remove();
+      }
+    } catch (error) {
+      this.showNotification('创建任务失败', 'error');
+    }
+  }
+
   updateConnectionStatus(connected) {
     const status = document.getElementById('connectionStatus');
     status.className = 'status ' + (connected ? 'connected' : 'disconnected');
@@ -600,6 +947,10 @@ function publishLesson(lessonId) {
   app.publishLesson(lessonId);
 }
 
+function deleteLesson(lessonId) {
+  app.deleteLesson(lessonId);
+}
+
 function publishTask(taskId) {
   app.publishTask(taskId);
 }
@@ -614,4 +965,40 @@ function gradeSubmission(submissionId) {
 
 function gradeAll() {
   app.gradeAll();
+}
+
+function loadExerciseBooks() {
+  app.loadExerciseBooks();
+}
+
+function parseExercise(lessonId) {
+  app.parseExercise(lessonId);
+}
+
+function viewExerciseBook(bookId) {
+  app.viewExerciseBook(bookId);
+}
+
+function deleteExerciseBook(bookId) {
+  app.deleteExerciseBook(bookId);
+}
+
+function updateQuestion(questionId, field, value) {
+  app.updateQuestion(questionId, field, value);
+}
+
+function updateQuestionOption(questionId, index, value) {
+  app.updateQuestionOption(questionId, index, value);
+}
+
+function saveQuestion(questionId) {
+  app.saveQuestion(questionId);
+}
+
+function deleteQuestion(questionId) {
+  app.deleteQuestion(questionId);
+}
+
+function createTaskFromExerciseBook(bookId) {
+  app.createTaskFromExerciseBook(bookId);
 }

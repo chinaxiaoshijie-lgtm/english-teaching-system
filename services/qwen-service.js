@@ -171,6 +171,9 @@ class QwenService {
     const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
 
     try {
+      console.log('Making API request to:', this.config.baseUrl);
+      console.log('Model:', this.config.model);
+
       const response = await fetch(this.config.baseUrl, {
         method: 'POST',
         headers: {
@@ -197,13 +200,23 @@ class QwenService {
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorText = await response.text();
+        console.error('API error response:', errorText);
+        throw new Error(`HTTP error! status: ${response.status}, body: ${errorText}`);
       }
 
       const data = await response.json();
+      console.log('API response received');
+
+      if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+        console.error('Invalid API response structure:', data);
+        throw new Error('Invalid API response structure');
+      }
+
       return data.choices[0].message.content;
     } catch (error) {
       clearTimeout(timeoutId);
+      console.error('API call error:', error);
       throw error;
     }
   }

@@ -7,9 +7,9 @@ module.exports = {
   qwen: {
     baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
     apiKey: 'sk-305c9af3b7c34bbdb57c1e471aa1acd0',
-    model: 'qwen-vl-max-latest',
+    model: 'qwen-plus',
     maxRetries: 3,
-    timeout: 10000
+    timeout: 60000
   },
   
   alicloud: {

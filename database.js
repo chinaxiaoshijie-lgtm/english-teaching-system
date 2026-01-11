@@ -75,6 +75,9 @@ class Database {
       await this.createClassroomSessionsTable();
       await this.createLessonSlidesTable();
       await this.addLessonSlideCountColumn();
+      await this.addLessonTypeColumn();
+      await this.createQuestionsTable();
+      await this.createExerciseBooksTable();
       await this.createIndexes();
       
       console.log('Database initialized successfully');
@@ -208,7 +211,7 @@ class Database {
         console.error('Error adding slide_count column:', error);
       }
     }
-    
+
     try {
       await this.exec('ALTER TABLE lessons ADD COLUMN has_slides BOOLEAN DEFAULT 0');
     } catch (error) {
@@ -216,6 +219,59 @@ class Database {
         console.error('Error adding has_slides column:', error);
       }
     }
+  }
+
+  async addLessonTypeColumn() {
+    try {
+      await this.exec('ALTER TABLE lessons ADD COLUMN lesson_type TEXT DEFAULT "class_pdf"');
+    } catch (error) {
+      if (!error.message.includes('duplicate column')) {
+        console.error('Error adding lesson_type column:', error);
+      }
+    }
+
+    try {
+      await this.exec('ALTER TABLE lessons ADD COLUMN is_disabled BOOLEAN DEFAULT 0');
+    } catch (error) {
+      if (!error.message.includes('duplicate column')) {
+        console.error('Error adding is_disabled column:', error);
+      }
+    }
+  }
+
+  async createQuestionsTable() {
+    const sql = `
+      CREATE TABLE IF NOT EXISTS questions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        lesson_id INTEGER,
+        exercise_book_id INTEGER,
+        type TEXT NOT NULL,
+        content TEXT NOT NULL,
+        options TEXT,
+        correct_answer TEXT,
+        difficulty TEXT DEFAULT 'medium',
+        tags TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (lesson_id) REFERENCES lessons(id),
+        FOREIGN KEY (exercise_book_id) REFERENCES exercise_books(id)
+      )
+    `;
+    await this.exec(sql);
+  }
+
+  async createExerciseBooksTable() {
+    const sql = `
+      CREATE TABLE IF NOT EXISTS exercise_books (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        lesson_id INTEGER,
+        title TEXT NOT NULL,
+        description TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (lesson_id) REFERENCES lessons(id)
+      )
+    `;
+    await this.exec(sql);
   }
 
   async createIndexes() {

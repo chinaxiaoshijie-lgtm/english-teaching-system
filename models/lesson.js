@@ -5,13 +5,14 @@ class Lesson {
 
   async create(lessonData) {
     const sql = `
-      INSERT INTO lessons (title, file_path, file_type)
-      VALUES (?, ?, ?)
+      INSERT INTO lessons (title, file_path, file_type, lesson_type)
+      VALUES (?, ?, ?, ?)
     `;
     const result = await this.db.run(sql, [
       lessonData.title,
       lessonData.filePath,
-      lessonData.fileType
+      lessonData.fileType,
+      lessonData.lessonType || 'class_pdf'
     ]);
     return result.lastInsertRowid;
   }
@@ -22,6 +23,11 @@ class Lesson {
   }
 
   async getAll() {
+    const sql = 'SELECT * FROM lessons WHERE is_disabled = 0 ORDER BY uploaded_at DESC';
+    return await this.db.all(sql);
+  }
+
+  async getAllIncludingDisabled() {
     const sql = 'SELECT * FROM lessons ORDER BY uploaded_at DESC';
     return await this.db.all(sql);
   }
@@ -58,6 +64,11 @@ class Lesson {
   async delete(id) {
     const sql = 'DELETE FROM lessons WHERE id = ?';
     await this.db.run(sql, [id]);
+  }
+
+  async setDisabled(id, disabled) {
+    const sql = 'UPDATE lessons SET is_disabled = ? WHERE id = ?';
+    await this.db.run(sql, [disabled, id]);
   }
 
   async updateSlideCount(id, count) {
